@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <title>قائمة العملاء</title>
+  <style>
+    body { font-family: Arial; padding: 20px; direction: rtl; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+    th { background: #4CAF50; color: white; }
+  </style>
+</head>
+<body>
+
+  <h2>👥 قائمة العملاء</h2>
+  <div id="status">جاري التحميل...</div>
+  <table id="table">
+    <thead>
+      <tr>
+        <th>اسم العميل</th>
+        <th>الرصيد</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <script>
+
+    var managerOrigin = null;
+
+    // استقبل الرد أولاً
+    window.addEventListener("message", function(event) {
+      if (!event.data) return;
+
+      // احفظ المصدر من أول رسالة
+      if (!managerOrigin) {
+        managerOrigin = event.origin;
+      }
+
+      if (event.data.responseType === "api") {
+        var data = event.data.data;
+
+        document.getElementById("status").textContent = "";
+        var tbody = document.getElementById("tbody");
+
+        if (!data || data.length === 0) {
+          document.getElementById("status").textContent = "لا توجد بيانات";
+          return;
+        }
+
+        data.forEach(function(customer) {
+          var row = document.createElement("tr");
+          row.innerHTML =
+            "<td>" + (customer.Name || "") + "</td>" +
+            "<td>" + (customer.Balance || 0) + "</td>";
+          tbody.appendChild(row);
+        });
+      }
+    });
+
+    // اطلب البيانات
+    window.parent.postMessage({
+      requestType: "api",
+      url: "/api4/customer-batch"
+    }, "*");
+
+  </script>
+</body>
+</html>
