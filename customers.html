@@ -8,13 +8,17 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
     th { background: #4CAF50; color: white; }
+    #status { color: #666; margin-bottom: 10px; }
+    #debug { background: #f5f5f5; padding: 10px; margin: 10px 0; 
+              font-size: 12px; direction: ltr; display: none; }
   </style>
 </head>
 <body>
 
   <h2>👥 قائمة العملاء</h2>
   <div id="status">جاري التحميل...</div>
-  <table id="table">
+  <div id="debug"></div>
+  <table>
     <thead>
       <tr>
         <th>اسم العميل</th>
@@ -26,43 +30,49 @@
 
   <script>
 
-    var managerOrigin = null;
+    var debug = document.getElementById("debug");
+    debug.style.display = "block";
 
-    // استقبل الرد أولاً
+    // استقبل أي رسالة وسجّلها للفحص
     window.addEventListener("message", function(event) {
-      if (!event.data) return;
+      debug.textContent = "رسالة وصلت: " + JSON.stringify(event.data).substring(0, 300);
 
-      // احفظ المصدر من أول رسالة
-      if (!managerOrigin) {
-        managerOrigin = event.origin;
+      var raw = event.data;
+
+      // Manager يرسل البيانات مباشرة كـ array أو object
+      var data = null;
+
+      if (Array.isArray(raw)) {
+        data = raw;
+      } else if (raw && Array.isArray(raw.data)) {
+        data = raw.data;
+      } else if (raw && Array.isArray(raw.result)) {
+        data = raw.result;
       }
 
-      if (event.data.responseType === "api") {
-        var data = event.data.data;
+      if (!data) return;
 
-        document.getElementById("status").textContent = "";
-        var tbody = document.getElementById("tbody");
+      document.getElementById("status").textContent = "تم التحميل — " + data.length + " عميل";
+      var tbody = document.getElementById("tbody");
 
-        if (!data || data.length === 0) {
-          document.getElementById("status").textContent = "لا توجد بيانات";
-          return;
-        }
-
-        data.forEach(function(customer) {
-          var row = document.createElement("tr");
-          row.innerHTML =
-            "<td>" + (customer.Name || "") + "</td>" +
-            "<td>" + (customer.Balance || 0) + "</td>";
-          tbody.appendChild(row);
-        });
-      }
+      data.forEach(function(customer) {
+        var row = document.createElement("tr");
+        row.innerHTML =
+          "<td>" + (customer.Name || customer.name || JSON.stringify(customer).substring(0,50)) + "</td>" +
+          "<td>" + (customer.Balance || customer.balance || 0) + "</td>";
+        tbody.appendChild(row);
+      });
     });
 
-    // اطلب البيانات
-    window.parent.postMessage({
-      requestType: "api",
-      url: "/api4/customer-batch"
-    }, "*");
+    // جرب الصيغتين معاً
+    window.parent.postMessage("/api4/customer-batch", "*");
+
+    setTimeout(function() {
+      window.parent.postMessage({ 
+        requestType: "api", 
+        url: "/api4/customer-batch" 
+      }, "*");
+    }, 1000);
 
   </script>
 </body>
