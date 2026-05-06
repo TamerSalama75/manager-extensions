@@ -8,16 +8,15 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
     th { background: #4CAF50; color: white; }
-    #status { color: #666; margin-bottom: 10px; }
-    #debug { background: #f5f5f5; padding: 10px; margin: 10px 0; 
-              font-size: 12px; direction: ltr; display: none; }
+    #debug { background: #fff3cd; padding: 10px; margin: 10px 0;
+              font-size: 12px; direction: ltr; word-break: break-all; }
   </style>
 </head>
 <body>
 
   <h2>👥 قائمة العملاء</h2>
-  <div id="status">جاري التحميل...</div>
-  <div id="debug"></div>
+  <div id="status">جاري الاتصال...</div>
+  <div id="debug">في انتظار رد Manager...</div>
   <table>
     <thead>
       <tr>
@@ -30,16 +29,19 @@
 
   <script>
 
-    var debug = document.getElementById("debug");
-    debug.style.display = "block";
+    // هذا هو عنوان Manager عندك — المفتاح الأساسي
+    var MANAGER_ORIGIN = "http://192.168.0.10:5000";
 
-    // استقبل أي رسالة وسجّلها للفحص
+    var msgCount = 0;
+
     window.addEventListener("message", function(event) {
-      debug.textContent = "رسالة وصلت: " + JSON.stringify(event.data).substring(0, 300);
+      msgCount++;
+      document.getElementById("debug").textContent =
+        "رسالة #" + msgCount + 
+        " | من: " + event.origin + 
+        "\n" + JSON.stringify(event.data).substring(0, 500);
 
       var raw = event.data;
-
-      // Manager يرسل البيانات مباشرة كـ array أو object
       var data = null;
 
       if (Array.isArray(raw)) {
@@ -48,31 +50,40 @@
         data = raw.data;
       } else if (raw && Array.isArray(raw.result)) {
         data = raw.result;
+      } else if (raw && Array.isArray(raw.response)) {
+        data = raw.response;
       }
 
-      if (!data) return;
+      if (!data || data.length === 0) return;
 
-      document.getElementById("status").textContent = "تم التحميل — " + data.length + " عميل";
+      document.getElementById("status").textContent = 
+        "✅ تم التحميل — " + data.length + " عميل";
+      
       var tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
 
-      data.forEach(function(customer) {
+      data.forEach(function(c) {
         var row = document.createElement("tr");
-        row.innerHTML =
-          "<td>" + (customer.Name || customer.name || JSON.stringify(customer).substring(0,50)) + "</td>" +
-          "<td>" + (customer.Balance || customer.balance || 0) + "</td>";
+        var name = c.Name || c.name || c.CustomerName || "";
+        var balance = c.Balance || c.balance || 0;
+        row.innerHTML = "<td>" + name + "</td><td>" + balance + "</td>";
         tbody.appendChild(row);
       });
     });
 
-    // جرب الصيغتين معاً
-    window.parent.postMessage("/api4/customer-batch", "*");
+    // إرسال الطلب بالصيغة الصحيحة مع تحديد origin المانجر
+    window.parent.postMessage("/api4/customer-batch", MANAGER_ORIGIN);
+
+    setTimeout(function() {
+      window.parent.postMessage("/api4/customer-batch", "*");
+    }, 1000);
 
     setTimeout(function() {
       window.parent.postMessage({ 
-        requestType: "api", 
+        type: "apiRequest",
         url: "/api4/customer-batch" 
-      }, "*");
-    }, 1000);
+      }, MANAGER_ORIGIN);
+    }, 2000);
 
   </script>
 </body>
