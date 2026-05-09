@@ -2,89 +2,88 @@
 <html dir="rtl" lang="ar">
 <head>
   <meta charset="UTF-8">
-  <title>قائمة العملاء</title>
+  <title>فواتير البيع</title>
   <style>
-    body { font-family: Arial; padding: 20px; direction: rtl; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
-    th { background: #4CAF50; color: white; }
-    #debug { background: #fff3cd; padding: 10px; margin: 10px 0;
-              font-size: 12px; direction: ltr; word-break: break-all; }
+    body{font-family:Arial;padding:20px;direction:rtl}
+    table{width:100%;border-collapse:collapse}
+    th,td{border:1px solid #ddd;padding:8px;text-align:right}
+    th{background:#2196F3;color:white}
+    #status{margin:10px 0;font-weight:bold}
   </style>
 </head>
 <body>
-
-  <h2>👥 قائمة العملاء</h2>
-  <div id="status">جاري الاتصال...</div>
-  <div id="debug">في انتظار رد Manager...</div>
+  <h2>&#x641;&#x648;&#x627;&#x62A;&#x64A;&#x631; &#x627;&#x644;&#x628;&#x64A;&#x639;</h2>
+  <div id="status">Loading...</div>
   <table>
     <thead>
       <tr>
-        <th>اسم العميل</th>
-        <th>الرصيد</th>
+        <th>&#x631;&#x642;&#x645; &#x627;&#x644;&#x641;&#x627;&#x62A;&#x648;&#x631;&#x629;</th>
+        <th>&#x627;&#x644;&#x639;&#x645;&#x64A;&#x644;</th>
+        <th>&#x627;&#x644;&#x645;&#x628;&#x644;&#x63A;</th>
+        <th>&#x627;&#x644;&#x62A;&#x627;&#x631;&#x64A;&#x62E;</th>
       </tr>
     </thead>
     <tbody id="tbody"></tbody>
   </table>
 
   <script>
+    function callApi(path) {
+      return new Promise(function(resolve, reject) {
+        var rid = crypto.randomUUID();
+        var timer = setTimeout(function() {
+          window.removeEventListener('message', h);
+          reject(new Error('Timeout'));
+        }, 15000);
+        function h(e) {
+          if (e.data && 
+              typeof e.data.type === 'string' &&
+              e.data.type.endsWith('-response') && 
+              e.data.requestId === rid) {
+            clearTimeout(timer);
+            window.removeEventListener('message', h);
+            resolve(e.data.body);
+          }
+        }
+        window.addEventListener('message', h);
+        window.parent.postMessage({
+          type: 'api-request',
+          method: 'GET',
+          path: path,
+          requestId: rid
+        }, '*');
+      });
+    }
 
-    // هذا هو عنوان Manager عندك — المفتاح الأساسي
-    var MANAGER_ORIGIN = "http://192.168.0.10:5000";
+    callApi('/api4/sales-invoice-batch?PageSize=50')
+    .then(function(data) {
+      var items = [];
+      if (Array.isArray(data)) items = data;
+      else if (data && Array.isArray(data.items)) items = data.items;
+      else if (data && Array.isArray(data.data)) items = data.data;
 
-    var msgCount = 0;
-
-    window.addEventListener("message", function(event) {
-      msgCount++;
-      document.getElementById("debug").textContent =
-        "رسالة #" + msgCount + 
-        " | من: " + event.origin + 
-        "\n" + JSON.stringify(event.data).substring(0, 500);
-
-      var raw = event.data;
-      var data = null;
-
-      if (Array.isArray(raw)) {
-        data = raw;
-      } else if (raw && Array.isArray(raw.data)) {
-        data = raw.data;
-      } else if (raw && Array.isArray(raw.result)) {
-        data = raw.result;
-      } else if (raw && Array.isArray(raw.response)) {
-        data = raw.response;
+      if (items.length === 0) {
+        document.getElementById('status').textContent = 
+          'Debug: ' + JSON.stringify(data).substring(0, 150);
+        return;
       }
 
-      if (!data || data.length === 0) return;
+      document.getElementById('status').textContent = 
+        'تم تحميل ' + items.length + ' فاتورة';
 
-      document.getElementById("status").textContent = 
-        "✅ تم التحميل — " + data.length + " عميل";
-      
-      var tbody = document.getElementById("tbody");
-      tbody.innerHTML = "";
-
-      data.forEach(function(c) {
-        var row = document.createElement("tr");
-        var name = c.Name || c.name || c.CustomerName || "";
-        var balance = c.Balance || c.balance || 0;
-        row.innerHTML = "<td>" + name + "</td><td>" + balance + "</td>";
-        tbody.appendChild(row);
+      var tbody = document.getElementById('tbody');
+      items.forEach(function(inv) {
+        var tr = document.createElement('tr');
+        tr.innerHTML =
+          '<td>' + (inv.Reference || inv.Number || '') + '</td>' +
+          '<td>' + (inv.Customer || inv.CustomerName || '') + '</td>' +
+          '<td>' + (inv.Total || inv.Amount || 0) + '</td>' +
+          '<td>' + (inv.Date || '') + '</td>';
+        tbody.appendChild(tr);
       });
+    })
+    .catch(function(err) {
+      document.getElementById('status').textContent = 'Error: ' + err.message;
     });
-
-    // إرسال الطلب بالصيغة الصحيحة مع تحديد origin المانجر
-    window.parent.postMessage("/api4/customer-batch", MANAGER_ORIGIN);
-
-    setTimeout(function() {
-      window.parent.postMessage("/api4/customer-batch", "*");
-    }, 1000);
-
-    setTimeout(function() {
-      window.parent.postMessage({ 
-        type: "apiRequest",
-        url: "/api4/customer-batch" 
-      }, MANAGER_ORIGIN);
-    }, 2000);
-
   </script>
 </body>
 </html>
