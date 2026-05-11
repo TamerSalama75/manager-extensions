@@ -1,99 +1,66 @@
 <!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <title>فواتير البيع</title>
-  <style>
-    body{font-family:Arial;padding:20px;direction:rtl}
-    table{width:100%;border-collapse:collapse}
-    th,td{border:1px solid #ddd;padding:8px;text-align:right}
-    th{background:#2196F3;color:white}
-    #status{margin:10px 0;font-weight:bold}
-  </style>
+<meta charset="UTF-8">
+<style>
+body{font-family:Arial;padding:20px}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{border:1px solid #ddd;padding:8px;text-align:left}
+th{background:#1d6fcf;color:white}
+#status{margin:10px 0;font-weight:bold}
+.btn{padding:8px 20px;background:#1d6fcf;color:white;border:none;border-radius:6px;cursor:pointer;font-size:14px}
+</style>
 </head>
 <body>
-  <h2>&#x641;&#x648;&#x627;&#x62A;&#x64A;&#x631; &#x627;&#x644;&#x628;&#x64A;&#x639;</h2>
-  <div id="status">Loading...</div>
-  <table>
-    <thead>
-      <tr>
-        <th>&#x631;&#x642;&#x645; &#x627;&#x644;&#x641;&#x627;&#x62A;&#x648;&#x631;&#x629;</th>
-        <th>&#x627;&#x644;&#x639;&#x645;&#x64A;&#x644;</th>
-        <th>&#x627;&#x644;&#x645;&#x628;&#x644;&#x63A;</th>
-        <th>&#x627;&#x644;&#x62A;&#x627;&#x631;&#x64A;&#x62E;</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
-
-  <script>
-    // بديل لـ crypto.randomUUID يعمل على HTTP و HTTPS
-    function makeUUID() {
-      var t = Date.now();
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = (t + Math.random() * 16) % 16 | 0;
-        t = Math.floor(t / 16);
-        return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
-      });
+<h2>Sales Invoices</h2>
+<div id="status">Press Load</div>
+<button class="btn" onclick="loadData()">Load</button>
+<table>
+<thead><tr><th>Reference</th><th>Date</th><th>Total</th></tr></thead>
+<tbody id="tbody"></tbody>
+</table>
+<script>
+function loadData(){
+  document.getElementById('status').textContent='Loading...';
+  var rid=crypto.randomUUID();
+  var timer=setTimeout(function(){
+    window.removeEventListener('message',h);
+    document.getElementById('status').textContent='Timeout';
+  },15000);
+  function h(e){
+    if(e.source!==window.parent)return;
+    if(!e.data||typeof e.data.type!=='string')return;
+    if(!e.data.type.endsWith('-response'))return;
+    if(e.data.requestId!==rid)return;
+    clearTimeout(timer);
+    window.removeEventListener('message',h);
+    var body=e.data.body;
+    var items=Array.isArray(body)?body:
+              (body&&Array.isArray(body.items))?body.items:[];
+    if(!items.length){
+      document.getElementById('status').textContent=
+        'No data. Raw: '+JSON.stringify(body).substring(0,100);
+      return;
     }
-
-    function callApi(path) {
-      return new Promise(function(resolve, reject) {
-        var rid = makeUUID();
-        var timer = setTimeout(function() {
-          window.removeEventListener('message', h);
-          reject(new Error('Timeout — تأكد من تشغيل الإضافة داخل Manager'));
-        }, 15000);
-        function h(e) {
-          if (e.data &&
-              typeof e.data.type === 'string' &&
-              e.data.type.endsWith('-response') &&
-              e.data.requestId === rid) {
-            clearTimeout(timer);
-            window.removeEventListener('message', h);
-            resolve(e.data.body);
-          }
-        }
-        window.addEventListener('message', h);
-        window.parent.postMessage({
-          type: 'api-request',
-          method: 'GET',
-          path: path,
-          requestId: rid
-        }, '*');
-      });
-    }
-
-    callApi('/api4/sales-invoice-batch?PageSize=50')
-    .then(function(data) {
-      var items = [];
-      if (Array.isArray(data)) items = data;
-      else if (data && Array.isArray(data.items)) items = data.items;
-      else if (data && Array.isArray(data.data)) items = data.data;
-
-      if (items.length === 0) {
-        document.getElementById('status').textContent =
-          'Debug: ' + JSON.stringify(data).substring(0, 200);
-        return;
-      }
-
-      document.getElementById('status').textContent =
-        '\u062A\u0645 \u062A\u062D\u0645\u064A\u0644 ' + items.length + ' \u0641\u0627\u062A\u0648\u0631\u0629';
-
-      var tbody = document.getElementById('tbody');
-      items.forEach(function(inv) {
-        var tr = document.createElement('tr');
-        tr.innerHTML =
-          '<td>' + (inv.Reference || inv.Number || '') + '</td>' +
-          '<td>' + (inv.Customer || inv.CustomerName || '') + '</td>' +
-          '<td>' + (inv.Total || inv.Amount || 0) + '</td>' +
-          '<td>' + (inv.Date || '') + '</td>';
-        tbody.appendChild(tr);
-      });
-    })
-    .catch(function(err) {
-      document.getElementById('status').textContent = 'Error: ' + err.message;
+    document.getElementById('status').textContent='Loaded '+items.length+' invoices';
+    var tbody=document.getElementById('tbody');
+    tbody.innerHTML='';
+    items.forEach(function(inv){
+      var item=inv.item||inv;
+      var lines=item.lines||[];
+      var total=0;
+      lines.forEach(function(ln){total+=(ln.qty||1)*(ln.salesUnitPrice||0)-(ln.discountAmount||0);});
+      var tr=document.createElement('tr');
+      tr.innerHTML='<td>'+(item.reference||item.Reference||'')+'</td>'+
+                   '<td>'+((item.issueDate||'').substring(0,10))+'</td>'+
+                   '<td>'+total.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>';
+      tbody.appendChild(tr);
     });
-  </script>
+  }
+  window.addEventListener('message',h);
+  window.parent.postMessage({type:'api-request',method:'GET',
+    path:'/api4/sales-invoice-batch?PageSize=50',requestId:rid},'*');
+}
+</script>
 </body>
 </html>
